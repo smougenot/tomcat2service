@@ -1,0 +1,230 @@
+#!/bin/sh
+#
+#
+### BEGIN INIT INFO
+# Provides:          @@SKEL_APP@@
+# Required-Start:    $local_fs $remote_fs $network $time $named
+# Required-Stop:     $local_fs $remote_fs $network $time $named
+# Default-Start:     3 5
+# Default-Stop:      0 1 2 6
+# Short-Description: @@SKEL_APP_SUM@@
+# Description:       @@SKEL_APP_DESC@@
+### END INIT INFO
+
+# Ajout du mode debug
+if [ "$1" == "debug" ]; then
+	export _DEBUG="true"
+	echo "Debug mode actif"
+fi
+
+RETVAL=0
+# nom du programme == nom du fichier dans /etc/init.d
+prog="@@SKEL_APP@@"                            
+# user pour lancer le programme
+user="@@SKEL_USER@@"                           
+# groupe pour les droits de fichiers 
+group="@@SKEL_GROUP@@"                         
+# shell de lancement (ex /opt/myapp/bin/catalina.sh)
+exec="@@SKEL_EXEC@@"                           
+# lock pour ne pas faire de lancements multiples
+lockfile="/var/lock/subsys/@@SKEL_APP@@"       
+# fichier contenant les paramétrages
+config="@@SKEL_APP_CONF@@"                     
+# répertoire des logs
+logdir="@@SKEL_LOGDIR@@"                       
+# répertoire temporaire
+tmp='@@SKEL_TMPDIR@@'
+
+# Source function library.
+if [ -r /etc/init.d/functions ]; then
+    . /etc/init.d/functions
+fi
+
+# Source des outils communs Sogelink.
+if [ -r /lib/initd-util/functions ]; then
+    . /lib/initd-util/functions
+else
+    echo "Impossible de charger /lib/initd-util/functions"
+    exit 1
+fi
+
+
+# Read config file
+if [ -r "${config}" ]; then
+  . ${config}
+else
+  echo "impossible de charger la configuration ${config}"
+  exit 2
+fi
+
+# 
+#===============================================================================
+# Vérifications de l'environnement
+#===============================================================================
+checkEnv(){
+
+  # acces a la commande java
+  if [ -r /usr/share/java-utils/java-functions ]; then
+    . /usr/share/java-utils/java-functions
+  else
+    echo "Can't read Java functions library, aborting"
+    exit 1
+  fi
+  set_javacmd
+  
+  # vérifications complémentaires (issues du fichier de config)
+  if type checkEnv_cpl 2>/dev/null | grep -q '^{' 2>/dev/null; then
+    checkEnv_cpl
+  fi
+  
+  #
+  # Post install
+  #
+  # traitement de post install spécifique
+  _postScript=${CATALINA_HOME}/bin/post_install.sh
+  if [ -f ${_postScript} ]; then
+    echo "lancement du script ${_postScript}"
+    sh ${_postScript}
+  else
+    echo "pas de script ${_postScript}"
+  fi
+
+  # vérification du répertoire tmp utilisé par l'application
+  if [ ! -d "$tmp" ]; then
+    echo "Création du répertoire tmp : ${tmp}" && \
+    mkdir -p "$tmp" && \
+    chown $user:$group "$tmp" && \
+    chmod 755 "$tmp"
+  fi
+  
+  # JMX
+  if [ $(find ${CATALINA_HOME}/lib -regex ".*catalina-*jmx-remote.*" | wc -l) -eq 0 ]; then
+    tomcat_version="$($exec version | grep  'Server version:' | cut -d/ -f2)"
+    jar_url="http://central.maven.org/maven2/org/apache/tomcat/tomcat-catalina-jmx-remote/${tomcat_version}/tomcat-catalina-jmx-remote-${tomcat_version}.jar"
+    echo "Remote JMX non disponible, ajouter le jar suivant dans ${CATALINA_HOME}/lib : ${jar_url} "
+  fi 
+}
+
+start() {
+    checkEnv
+    echo "Starting $prog: "
+    touch $CATALINA_PID
+    chown $user:$group $CATALINA_PID
+    
+    # configuration des fichiers .skel
+    updateconfig ${CATALINA_HOME}
+
+    # start_daemon on Suse, daemon on RH
+    daemon --user="$user" --pidfile="${CATALINA_PID}" "$exec" start > ${logdir}/initd_start.log 2>&1
+    RETVAL=$?
+
+    if [ $RETVAL -eq 0 ]; then
+      touch $lockfile
+      log_success_msg
+    else
+      log_failure_msg
+    fi
+}
+
+stop() {
+    echo "Stopping $prog: "
+    RETVAL=0
+    if [ -s $CATALINA_PID ]; then
+      $exec stop $SHUTDOWN_WAIT -force > ${logdir}/initd_stop.log 2>&1
+      RETVAL=$?
+    
+      # Attente (limitee) de l'arret
+      if [ "$RETVAL" -eq "0" ]; then
+        attenteArret ${CATALINA_PID} $SHUTDOWN_WAIT
+      fi
+    else
+      log_warning_msg "Pas de fichier PID : $CATALINA_PID"
+    fi
+    echo
+    [ $RETVAL -eq 0 ] && rm -f $lockfile
+}
+
+#===============================================================================
+# Status
+#===============================================================================
+#status() {
+#    $exec status
+#}
+function status {
+   kpid=
+   checkpidfile "${CATALINA_PID}"
+   RETVAL=$?
+   if [ "$RETVAL" -eq "0" ]; then
+      log_success_msg "${prog} (pid ${kpid}) is running..."
+   elif [ "$RETVAL" -eq "1" ]; then
+      log_failure_msg "PID file exists, but process is not running"
+   else 
+      RETVAL=0
+      checklockfile
+      RETVAL=$?
+      if [ "$RETVAL" -eq "2" ]; then
+         log_failure_msg "${prog} lockfile exists but process is not running"
+      else
+         pid="$(/usr/bin/pgrep -d , -u "${user}" -G "${group}" java)"
+         if [ -z "$pid" ]; then
+             log_success_msg "${prog} is stopped"
+             RETVAL="3"
+         else
+             log_success_msg "${prog} (pid $pid) is running..."
+             RETVAL="0"
+         fi
+      fi
+  fi
+}
+
+#===============================================================================
+# Gestion du fichier de lock pour ne pas lancer plusieurs instances
+#===============================================================================
+function checklockfile() {
+   if [ -f ${lockfile} ]; then
+      pid="$(/usr/bin/pgrep -d , -u "${user}" -G "${group}" java)"
+# The lockfile exists but the process is not running
+      if [ -z "$pid" ]; then
+         RETVAL="2"
+      fi
+   fi
+}
+
+restart() {
+    # start_daemon on Suse, daemon on RH
+    if [ -x /sbin/start_daemon ]; then
+      start_daemon -u $user $exec restart
+    else
+      daemon --user=$user $exec restart
+    fi
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  debug)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  status)
+        status
+        RETVAL=$?
+        ;;
+  restart|force-reload|reload)
+        stop
+        start
+        ;;
+    version)
+        $exec version
+        echo "${prog} @@SKEL_VERSION@@"
+        ;;
+  *)
+        echo $"Usage: $prog {start|stop|debug|restart|force-reload|reload|status|version}"
+        RETVAL=2
+esac
+
+exit $RETVAL

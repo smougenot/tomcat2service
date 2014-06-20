@@ -1,0 +1,19 @@
+@@SKEL_LOGDIR@@/catalina.out {
+ copytruncate
+ daily
+ compress
+ missingok
+ delaycompress
+ dateext
+ olddir @@SKEL_LOGDIR@@/compress
+}
+
+@@SKEL_LOGDIR@@/*.log {
+ copytruncate
+ daily
+ compress
+ missingok
+ delaycompress
+ dateext
+ olddir @@SKEL_LOGDIR@@/compress
+}

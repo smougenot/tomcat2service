@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# Bibliothèque de fonctions communes
+#
+
+_SCRIPTS='@@SKEL_APPDIR@@'
+# initialisation locale pour faciliter les tests
+if [ ! -d ${_SCRIPTS} ] && [ -f ${BASH_SOURCE[@]} ]; then
+   _SCRIPTS=$(dirname ${BASH_SOURCE[@]})
+fi
+
+doSource () {
+  # Chargement d'une bibliothèque
+  if [ -r "${1}" ]; then
+    . "${1}"
+  else
+    echo "Impossible de charger ${1}"
+  fi
+}
+
+# Chargement outil de message
+doSource "${_SCRIPTS}/log_message.sh"
+
+# Chargement outil de lancement/arrêt
+doSource "${_SCRIPTS}/run_util.sh"

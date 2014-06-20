@@ -1,0 +1,35 @@
+Vagrant sert à construire / packager des VM
+A partir d'un fichier de description VagrantFile
+
+Installation:
+http://vagrantup.com/docs/getting-started/index.html
+
+Utilisation:
+Lancer la VM
+1- Ouvrir une console dans le répertorie de la VM choisie (il doit y avoir un fichier VagrantFile dans ce répertoire)
+2- lancer la commande "vagrant up"
+3- lancer la commande "vagrant ssh"
+4- lancer la commande "sudo su"
+
+Utilisation de puppet (node):
+sudo hostname $nodepattern
+- depuis le puppet master :
+puppet agent -t -v
+
+- depuis le répertoire local
+puppet apply --modulepath '/vagrant_puppet/modules' /vagrant_puppet/manifests/site.pp
+
+Utilisation de puppet (role) :
+
+Pour disposer de la configuration hiera en local ( à relancer après chaque modif dans hiera )
+  /vagrant_puppet/hiera_test_deploy.sh
+  
+Pour lancer une classe en local
+  puppet apply --modulepath=/vagrant_puppet/modules/ -dv -e " Exec { path => '/bin/:/sbin/:/usr/bin/:/usr/sbin/'} include role::octopus::octopus_back"
+
+Arrêter la VM
+1- Ouvrir une console dans le répertorie de la VM choisie
+2- lancer la commande "vagrant suspend" (ou "vagrant halt" arrêt du Guest puis arrêt de la VM)
+Effacer toute trace de la VM
+1- Ouvrir une console dans le répertorie de la VM choisie
+2- lancer la commande "vagrant destroy"

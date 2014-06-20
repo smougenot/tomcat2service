@@ -1,0 +1,12 @@
+Pour vérifier le lien avec PuppetMaster (utilise la machine configurée par le provisionning)
+  puppet agent -t
+
+Pour disposer de la configuration hiera en local
+  /vagrant_puppet/hiera_test_deploy.sh
+  
+Pour lancer une classe en local
+  puppet apply --modulepath=/vagrant_puppet/modules/ -dv -e " Exec { path => '/bin/:/sbin/:/usr/bin/:/usr/sbin/'} include role::dict::v6::app_cas"
+  
+Pour connaitre toutes les variables possibles sur une machine
+  puppet apply -v -e 'file { "/tmp/facts.yaml": content => inline_template("<%= scope.to_hash.reject { |k,v| !( k.is_a?(String) && v.is_a?(String) ) }.to_yaml %>"),}'
+  more /tmp/facts.yaml

@@ -5,4 +5,5 @@ SRPMS
 TEMP
 .vagrant
 
-tomcat-util/apache-tomcat-*
+apache-tomcat-*
+*.rpm
